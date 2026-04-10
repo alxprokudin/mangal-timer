@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#ff6b35">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Таймер для мангала</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --text: #eee;
+    --accent: #ff6b35;
+    --status: #aaa;
+    --cycle: #888;
+    --start-bg: #06d6a0;
+    --start-text: #1a1a2e;
+    --start-hover: #05c090;
+    --stop-bg: #ef476f;
+    --stop-hover: #d63d60;
+    --disabled: #555;
+    --flip: #ffd166;
+    --mode-bg: transparent;
+    --mode-active-text: #fff;
+    --toggle-bg: rgba(255,255,255,.1);
+  }
+  [data-theme="light"] {
+    --bg: #f5f0eb;
+    --text: #2d2d2d;
+    --accent: #e05520;
+    --status: #666;
+    --cycle: #888;
+    --start-bg: #06d6a0;
+    --start-text: #fff;
+    --start-hover: #05b88a;
+    --stop-bg: #ef476f;
+    --stop-hover: #d63d60;
+    --disabled: #ccc;
+    --flip: #c9950a;
+    --mode-bg: transparent;
+    --mode-active-text: #fff;
+    --toggle-bg: rgba(0,0,0,.08);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    transition: background .3s, color .3s;
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 1.5rem; color: var(--accent); }
+  .theme-toggle {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    background: var(--toggle-bg);
+    border: none;
+    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    font-size: 1.4rem;
+    cursor: pointer;
+    transition: background .3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .theme-toggle:hover { opacity: .8; }
+  .modes { display: flex; gap: 12px; margin-bottom: 2rem; }
+  .modes button {
+    padding: 12px 28px;
+    font-size: 1.1rem;
+    border: 2px solid var(--accent);
+    border-radius: 12px;
+    background: var(--mode-bg);
+    color: var(--accent);
+    cursor: pointer;
+    transition: .2s;
+  }
+  .modes button.active,
+  .modes button:hover {
+    background: var(--accent);
+    color: var(--mode-active-text);
+  }
+  .timer-display {
+    font-size: 7rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: .4rem;
+    min-width: 280px;
+    text-align: center;
+  }
+  .status {
+    font-size: 1.2rem;
+    height: 2rem;
+    margin-bottom: 1.5rem;
+    color: var(--status);
+  }
+  .status.flip { color: var(--flip); font-weight: 600; }
+  .cycle-count {
+    font-size: 1rem;
+    margin-bottom: 1.5rem;
+    color: var(--cycle);
+  }
+  .controls { display: flex; gap: 16px; }
+  .controls button {
+    padding: 14px 40px;
+    font-size: 1.2rem;
+    border: none;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: .2s;
+  }
+  #btnStart {
+    background: var(--start-bg);
+    color: var(--start-text);
+  }
+  #btnStart:hover { background: var(--start-hover); }
+  #btnStop {
+    background: var(--stop-bg);
+    color: #fff;
+  }
+  #btnStop:hover { background: var(--stop-hover); }
+  #btnStop:disabled {
+    background: var(--disabled);
+    cursor: default;
+  }
+</style>
+</head>
+<body>
+  <button class="theme-toggle" id="themeToggle" aria-label="Сменить тему">🌙</button>
+  <h1>🔥 Таймер для мангала</h1>
+
+  <div class="modes">
+    <button data-sec="30" class="active">30 сек</button>
+    <button data-sec="45">45 сек</button>
+    <button data-sec="60">60 сек</button>
+  </div>
+
+  <div class="timer-display" id="display">0:30</div>
+  <div class="status" id="status"></div>
+  <div class="cycle-count" id="cycleCount"></div>
+
+  <div class="controls">
+    <button id="btnStart">Старт</button>
+    <button id="btnStop" disabled>Стоп</button>
+  </div>
+
+<script>
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playBeep(freq = 880, duration = 0.25) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'square';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + duration);
+}
+
+function playAlarm() {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  for (let i = 0; i < 5; i++) {
+    setTimeout(() => playBeep(880, 0.18), i * 250);
+  }
+}
+
+// --- Wake Lock: не даём экрану погаснуть ---
+let wakeLock = null;
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    }
+  } catch (e) { /* не поддерживается или отклонено */ }
+}
+function releaseWakeLock() {
+  if (wakeLock) { wakeLock.release(); wakeLock = null; }
+}
+// Перезапрашиваем Wake Lock при возврате на вкладку
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && running) requestWakeLock();
+});
+
+const display = document.getElementById('display');
+const status = document.getElementById('status');
+const cycleCount = document.getElementById('cycleCount');
+const btnStart = document.getElementById('btnStart');
+const btnStop = document.getElementById('btnStop');
+const modeButtons = document.querySelectorAll('.modes button');
+
+let selectedSeconds = 30;
+let running = false;
+let cycles = 0;
+let tickId = null;
+
+// Состояние на основе абсолютного времени
+let phaseEndTime = 0;   // timestamp (ms) когда текущая фаза закончится
+let phase = 'idle';      // 'cooking' | 'flip' | 'idle'
+
+function fmt(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+function getRemaining() {
+  return Math.max(0, Math.ceil((phaseEndTime - Date.now()) / 1000));
+}
+
+function updateDisplay() {
+  display.textContent = fmt(getRemaining());
+}
+
+modeButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (running) return;
+    modeButtons.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedSeconds = parseInt(btn.dataset.sec);
+    display.textContent = fmt(selectedSeconds);
+  });
+});
+
+function tick() {
+  if (!running) return;
+  const rem = getRemaining();
+  updateDisplay();
+
+  if (rem <= 0) {
+    if (phase === 'cooking') {
+      // Время жарки вышло — сигнал + пауза на переворот
+      cycles++;
+      cycleCount.textContent = `Переворотов: ${cycles}`;
+      playAlarm();
+      phase = 'flip';
+      phaseEndTime = Date.now() + 5000;
+      status.textContent = '🔄 Переворачивай! (5 сек)';
+      status.className = 'status flip';
+      updateDisplay();
+    } else if (phase === 'flip') {
+      // Пауза закончилась — снова жарим
+      phase = 'cooking';
+      phaseEndTime = Date.now() + selectedSeconds * 1000;
+      status.textContent = '⏱ Жарим...';
+      status.className = 'status';
+      updateDisplay();
+    }
+  }
+}
+
+function startLoop() {
+  // Тикаем часто (250ms), чтобы быстро догонять после сна
+  tickId = setInterval(tick, 250);
+}
+
+function stopTimer() {
+  clearInterval(tickId);
+  tickId = null;
+  running = false;
+  phase = 'idle';
+  btnStart.disabled = false;
+  btnStop.disabled = true;
+  modeButtons.forEach(b => b.disabled = false);
+  status.textContent = cycles > 0 ? `Готово! Циклов: ${cycles}` : '';
+  status.className = 'status';
+  releaseWakeLock();
+}
+
+// При возврате из фона — пересчитываем и догоняем пропущенные фазы
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && running) {
+    // Прокручиваем все пропущенные фазы
+    let safety = 200; // защита от бесконечного цикла
+    while (running && getRemaining() <= 0 && safety-- > 0) {
+      tick();
+    }
+    updateDisplay();
+  }
+});
+
+btnStart.addEventListener('click', () => {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  running = true;
+  cycles = 0;
+  phase = 'cooking';
+  cycleCount.textContent = '';
+  phaseEndTime = Date.now() + selectedSeconds * 1000;
+  status.textContent = '⏱ Жарим...';
+  status.className = 'status';
+  updateDisplay();
+  btnStart.disabled = true;
+  btnStop.disabled = false;
+  modeButtons.forEach(b => b.disabled = true);
+  requestWakeLock();
+  startLoop();
+});
+
+btnStop.addEventListener('click', () => {
+  stopTimer();
+  display.textContent = fmt(selectedSeconds);
+  cycles = 0;
+  cycleCount.textContent = '';
+});
+
+display.textContent = fmt(selectedSeconds);
+
+// --- Переключение темы ---
+const themeToggle = document.getElementById('themeToggle');
+const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  themeToggle.textContent = theme === 'light' ? '☀️' : '🌙';
+  metaThemeColor.content = theme === 'light' ? '#f5f0eb' : '#ff6b35';
+  localStorage.setItem('theme', theme);
+}
+themeToggle.addEventListener('click', () => {
+  const current = document.documentElement.getAttribute('data-theme');
+  applyTheme(current === 'light' ? 'dark' : 'light');
+});
+// Инициализация: сохранённая тема → системная → тёмная
+(function() {
+  const saved = localStorage.getItem('theme');
+  if (saved) return applyTheme(saved);
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  applyTheme(prefersDark ? 'dark' : 'light');
+})();
+
+// Регистрация Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js');
+}
+</script>
+</body>
+</html>
