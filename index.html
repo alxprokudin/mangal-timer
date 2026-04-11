@@ -76,8 +76,8 @@
     z-index: 10;
   }
   .theme-toggle:hover { opacity: .8; }
-  .modes { display: flex; gap: 12px; margin-bottom: 2rem; }
-  .modes button {
+  .modes, .flip-modes { display: flex; gap: 12px; margin-bottom: 1.2rem; }
+  .modes button, .flip-modes button {
     padding: 12px 28px;
     font-size: 1.1rem;
     border: 2px solid var(--accent);
@@ -87,11 +87,18 @@
     cursor: pointer;
     transition: .2s;
   }
-  .modes button.active,
-  .modes button:hover {
+  .modes button.active, .flip-modes button.active,
+  .modes button:hover, .flip-modes button:hover {
     background: var(--accent);
     color: var(--mode-active-text);
   }
+  .setting-label {
+    font-size: .85rem;
+    color: var(--status);
+    margin-bottom: .4rem;
+  }
+  .flip-modes { margin-bottom: 2rem; }
+  .flip-modes button { padding: 8px 18px; font-size: .95rem; }
   .timer-display {
     font-size: 7rem;
     font-weight: 700;
@@ -141,10 +148,19 @@
   <button class="theme-toggle" id="themeToggle" aria-label="Сменить тему">🌙</button>
   <h1>🔥 Таймер для мангала</h1>
 
+  <div class="setting-label">Время жарки</div>
   <div class="modes">
     <button data-sec="30" class="active">30 сек</button>
     <button data-sec="45">45 сек</button>
     <button data-sec="60">60 сек</button>
+  </div>
+
+  <div class="setting-label">Пауза на переворот</div>
+  <div class="flip-modes">
+    <button data-flip="3">3 сек</button>
+    <button data-flip="5" class="active">5 сек</button>
+    <button data-flip="7">7 сек</button>
+    <button data-flip="10">10 сек</button>
   </div>
 
   <div class="timer-display" id="display">0:30</div>
@@ -204,9 +220,20 @@ const btnStop = document.getElementById('btnStop');
 const modeButtons = document.querySelectorAll('.modes button');
 
 let selectedSeconds = 30;
+let flipSeconds = 5;
 let running = false;
 let cycles = 0;
 let tickId = null;
+
+const flipButtons = document.querySelectorAll('.flip-modes button');
+flipButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (running) return;
+    flipButtons.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    flipSeconds = parseInt(btn.dataset.flip);
+  });
+});
 
 // Состояние на основе абсолютного времени
 let phaseEndTime = 0;   // timestamp (ms) когда текущая фаза закончится
@@ -248,8 +275,8 @@ function tick() {
       cycleCount.textContent = `Переворотов: ${cycles}`;
       playAlarm();
       phase = 'flip';
-      phaseEndTime = Date.now() + 5000;
-      status.textContent = '🔄 Переворачивай! (5 сек)';
+      phaseEndTime = Date.now() + flipSeconds * 1000;
+      status.textContent = `🔄 Переворачивай! (${flipSeconds} сек)`;
       status.className = 'status flip';
       updateDisplay();
     } else if (phase === 'flip') {
@@ -276,6 +303,7 @@ function stopTimer() {
   btnStart.disabled = false;
   btnStop.disabled = true;
   modeButtons.forEach(b => b.disabled = false);
+  flipButtons.forEach(b => b.disabled = false);
   status.textContent = cycles > 0 ? `Готово! Циклов: ${cycles}` : '';
   status.className = 'status';
   releaseWakeLock();
@@ -306,6 +334,7 @@ btnStart.addEventListener('click', () => {
   btnStart.disabled = true;
   btnStop.disabled = false;
   modeButtons.forEach(b => b.disabled = true);
+  flipButtons.forEach(b => b.disabled = true);
   requestWakeLock();
   startLoop();
 });
