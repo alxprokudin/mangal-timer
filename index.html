@@ -97,7 +97,7 @@
     color: var(--status);
     margin-bottom: .4rem;
   }
-  .flip-modes { margin-bottom: 2rem; }
+  .flip-modes { margin-bottom: 2rem; flex-wrap: wrap; justify-content: center; }
   .flip-modes button { padding: 8px 18px; font-size: .95rem; }
   .timer-display {
     font-size: 7rem;
@@ -161,6 +161,8 @@
     <button data-flip="5" class="active">5 сек</button>
     <button data-flip="7">7 сек</button>
     <button data-flip="10">10 сек</button>
+    <button data-flip="15">15 сек</button>
+    <button data-flip="20">20 сек</button>
   </div>
 
   <div class="timer-display" id="display">0:30</div>
